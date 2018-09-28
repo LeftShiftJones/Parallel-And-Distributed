@@ -115,29 +115,16 @@ void *convolve(void *thing)
     mystery_box_t *box = (mystery_box_t *)thing;
     image_t *input = box->input;
     image_t *output = box->output;
-<<<<<<< HEAD
     kernel_t *kernel = box->kernel;
     int columns = input->columns;
     int rows = input->rows;
     int half_dim = KERNEL_DIM / 2;
     int kernel_norm = normalize_kernel(*kernel);
     for (int r = box->thread+1; r < rows - 1; r += box->num_threads)
-=======
-    //kernel_t *kernel = box->kernel;
-    int start = box->thread;
-    int threads = box->num_threads;
-    int columns = input->columns;
-    int rows = input->rows;
-    int half_dim = KERNEL_DIM / 2;
-    int kernel_norm = normalize_kernel(*box->kernel);
-
-    //init_image(output, rows, columns);
-
-    for (int r = start; r < rows - 1; r += threads)
->>>>>>> refs/remotes/origin/master
     {
         for (int c = 1; c < columns - 1; c++)
         {
+
             for (int b = 0; b < BYTES_PER_PIXEL; b++)
             {
                 int value = 0;
@@ -153,12 +140,7 @@ void *convolve(void *thing)
                         {
                             int R = r + (kr - half_dim);
                             int C = c + (kc - half_dim);
-<<<<<<< HEAD
                             value += (*kernel)[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];                            
-=======
-                            //value += *kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
-                            value += *box->kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
->>>>>>> refs/remotes/origin/master
                         }
                     }
                     value /= kernel_norm;
@@ -312,7 +294,6 @@ int main(int argc, char **argv)
 
     image_t input;
     image_t output;
-    printf("%d\n", num_threads_used);
     pthread_t threads[num_threads_used];
     load_and_decode(&input, input_file_name);
     init_image(&output, input.rows, input.columns);
