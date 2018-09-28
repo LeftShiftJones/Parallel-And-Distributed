@@ -72,10 +72,9 @@ void init_image(image_t *image, int rows, int columns)
 
 /* Free a previously initialized image.
  */
-void
-free_image(image_t *image)
+void free_image(image_t *image)
 {
-  free(image->pixels);
+    free(image->pixels);
 }
 
 void copy(image_t *output, image_t *input)
@@ -117,8 +116,8 @@ void *convolve(void *thing)
     mystery_box_t *box = (mystery_box_t *)thing;
     image_t *input = box->input;
     image_t *output = box->output;
-    //kernel_t kernel = box->kernel;
-    int thread = box->thread;
+    //kernel_t *kernel = box->kernel;
+    int start = box->thread;
     int threads = box->num_threads;
     int columns = input->columns;
     int rows = input->rows;
@@ -127,7 +126,7 @@ void *convolve(void *thing)
 
     //init_image(output, rows, columns);
 
-    for (int r = thread; r < rows - 1; r += threads)
+    for (int r = start; r < rows - 1; r += threads)
     {
         for (int c = 0; c < columns - 1; c++)
         {
@@ -148,6 +147,7 @@ void *convolve(void *thing)
                         {
                             int R = r + (kr - half_dim);
                             int C = c + (kc - half_dim);
+                            //value += *kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
                             value += *box->kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
                         }
                     }
@@ -264,7 +264,7 @@ void usage(char *prog_name, char *msge)
     fprintf(stderr, "  -i <input file>   set input file\n");
     fprintf(stderr, "  -o <output file>  set output file\n");
     fprintf(stderr, "  -k <kernel>       kernel from:\n");
-    fprintf(stderr, "  -n <num threads>  # threads used:\n");
+    fprintf(stderr, "  -n <num threads>  # threads to use:\n");
 
     for (int i = 0; kernel_catalog[i].name; i++)
     {
@@ -337,9 +337,14 @@ int main(int argc, char **argv)
     {
         usage(prog_name, "Input and output file can't be the same");
     }
+    if (num_threads_used < 1)
+    {
+        usage(prog_name, "Invalid number of threads");
+    }
 
     image_t input;
     image_t output;
+    printf("%d\n", num_threads_used);
     pthread_t threads[num_threads_used];
     load_and_decode(&input, input_file_name);
     mystery_box_t *box = create_mystery_box(&input, &output, num_threads_used, &selected_entry->kernel);
