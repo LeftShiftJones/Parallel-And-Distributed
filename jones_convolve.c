@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "lodepng.h"
 
@@ -10,6 +11,7 @@
 #define GREEN_OFFSET 1
 #define BLUE_OFFSET 2
 #define ALPHA_OFFSET 3
+#define ONE_BILLION (double)1000000000.0
 
 #define IMG_BYTE(columns, r, c, b) ((columns * BYTES_PER_PIXEL * r) + (BYTES_PER_PIXEL * c) + b)
 #define CLAMP(val, min, max) (val < min ? min : val > max ? max : val)
@@ -236,6 +238,13 @@ mystery_box_t *create_mystery_box(image_t *input, image_t *output, int current_t
     return new;
 }
 
+//get current time
+double now(void) {
+    struct timespec current_time;
+    clock_gettime(CLOCK_REALTIME, &current_time);
+    return current_time.tv_sec + (current_time.tv_nsec / ONE_BILLION);
+}
+
 int main(int argc, char **argv)
 {
     char *prog_name = argv[0]; /* Convenience */
@@ -295,24 +304,50 @@ int main(int argc, char **argv)
     image_t input;
     image_t output;
     pthread_t threads[num_threads_used];
+    mystery_box_t *boxes[num_threads_used];
     load_and_decode(&input, input_file_name);
     init_image(&output, input.rows, input.columns);
-
-    mystery_box_t *boxes[num_threads_used];
-    for (int i = 0; i < num_threads_used; i++)
-    {
-        boxes[i] = create_mystery_box(&input, &output, i, num_threads_used, &selected_entry->kernel);
-    }
-    //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
-    for (int i = 0; i < num_threads_used; i++)
-    {
-        pthread_create(&threads[i], NULL, convolve, boxes[i]);
-    }
-    for (int i = 0; i < num_threads_used; i++)
-    {
-        pthread_join(threads[i], NULL);
+    for(int c = 1; c <= num_threads_used; c++) {
+        for (int i = 0; i < c; i++)
+        {
+            boxes[i] = create_mystery_box(&input, &output, i, c, &selected_entry->kernel);
+        }
+        double start_time = now();
+        //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
+        for (int i = 0; i < c; i++)
+        {
+            pthread_create(&threads[i], NULL, convolve, boxes[i]);
+        }
+        for (int i = 0; i < c; i++)
+        {
+            pthread_join(threads[i], NULL);
+        }
+        if(c > 1)
+            printf("With %d cores, took %5.3f seconds\n", c, now()-start_time);
+        else
+            printf("With 1 core, took %5.3f seconds\n", now()-start_time);
     }
     encode_and_store(&output, output_file_name);
+
+    /* ORIGINAL WORKING CODE, TESTING LOOP MECHANISM
+        init_image(&output, input.rows, input.columns);
+        mystery_box_t *boxes[num_threads_used];
+        for (int i = 0; i < num_threads_used; i++)
+        {
+            boxes[i] = create_mystery_box(&input, &output, i, num_threads_used, &selected_entry->kernel);
+        }
+        double start_time = now();
+        //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
+        for (int i = 0; i < num_threads_used; i++)
+        {
+            pthread_create(&threads[i], NULL, convolve, boxes[i]);
+        }
+        for (int i = 0; i < num_threads_used; i++)
+        {
+            pthread_join(threads[i], NULL);
+        }
+        encode_and_store(&output, output_file_name);
+    */
 
     free_image(&input);
     free_image(&output);
