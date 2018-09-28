@@ -45,7 +45,6 @@ void load_and_decode(image_t *image, const char *file_name)
     {
         fprintf(stderr, "error %u: %s\n", error, lodepng_error_text(error));
     }
-    //output image info
     printf("Loaded %s (%dx%d)\n", file_name, image->columns, image->rows);
 }
 
@@ -116,6 +115,14 @@ void *convolve(void *thing)
     mystery_box_t *box = (mystery_box_t *)thing;
     image_t *input = box->input;
     image_t *output = box->output;
+<<<<<<< HEAD
+    kernel_t *kernel = box->kernel;
+    int columns = input->columns;
+    int rows = input->rows;
+    int half_dim = KERNEL_DIM / 2;
+    int kernel_norm = normalize_kernel(*kernel);
+    for (int r = box->thread+1; r < rows - 1; r += box->num_threads)
+=======
     //kernel_t *kernel = box->kernel;
     int start = box->thread;
     int threads = box->num_threads;
@@ -127,16 +134,15 @@ void *convolve(void *thing)
     //init_image(output, rows, columns);
 
     for (int r = start; r < rows - 1; r += threads)
+>>>>>>> refs/remotes/origin/master
     {
-        for (int c = 0; c < columns - 1; c++)
+        for (int c = 1; c < columns - 1; c++)
         {
             for (int b = 0; b < BYTES_PER_PIXEL; b++)
             {
                 int value = 0;
-
                 if (b == ALPHA_OFFSET)
                 {
-                    //Retain alpha channel
                     value = input->pixels[IMG_BYTE(columns, r, c, b)];
                 }
                 else
@@ -147,8 +153,12 @@ void *convolve(void *thing)
                         {
                             int R = r + (kr - half_dim);
                             int C = c + (kc - half_dim);
+<<<<<<< HEAD
+                            value += (*kernel)[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];                            
+=======
                             //value += *kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
                             value += *box->kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
+>>>>>>> refs/remotes/origin/master
                         }
                     }
                     value /= kernel_norm;
@@ -161,48 +171,6 @@ void *convolve(void *thing)
 
     return (void *)NULL;
 }
-/*
-void convolve(image_t *output, image_t *input, kernel_t kernel)
-{
-    int columns = input->columns;
-    int rows = input->rows;
-    int half_dim = KERNEL_DIM / 2;
-    int kernel_norm = normalize_kernel(kernel);
-
-    init_image(output, rows, columns);
-
-    for (int r = 0; r < rows - 1; r++)
-    {
-        for (int c = 0; c < columns - 1; c++)
-        {
-            for (int b = 0; b < BYTES_PER_PIXEL; b++)
-            {
-                int value = 0;
-
-                if (b == ALPHA_OFFSET)
-                {
-                    //Retain alpha channel
-                    value = input->pixels[IMG_BYTE(columns, r, c, b)];
-                }
-                else
-                {
-                    for (int kr = 0; kr < KERNEL_DIM; kr++)
-                    {
-                        for (int kc = 0; kc < KERNEL_DIM; kc++)
-                        {
-                            int R = r + (kr - half_dim);
-                            int C = c + (kc - half_dim);
-                            value += kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
-                        }
-                    }
-                    value /= kernel_norm;
-                    value = CLAMP(value, 0, 0xFF);
-                }
-                output->pixels[IMG_BYTE(colums, r, c, b)] = value;
-            }
-        }
-    }
-}*/
 
 #define DEFAULT_KERNEL_NAME "identity"
 
@@ -275,13 +243,13 @@ void usage(char *prog_name, char *msge)
     exit(1);
 }
 
-mystery_box_t *create_mystery_box(image_t *input, image_t *output, int num_threads, kernel_t *kernel)
+mystery_box_t *create_mystery_box(image_t *input, image_t *output, int current_thread, int num_threads, kernel_t *kernel)
 {
     mystery_box_t *new = malloc(sizeof(mystery_box_t));
     new->input = input;
     new->output = output;
     new->kernel = kernel;
-    new->thread = 0;
+    new->thread = current_thread;
     new->num_threads = num_threads;
     return new;
 }
@@ -347,25 +315,24 @@ int main(int argc, char **argv)
     printf("%d\n", num_threads_used);
     pthread_t threads[num_threads_used];
     load_and_decode(&input, input_file_name);
-    mystery_box_t *box = create_mystery_box(&input, &output, num_threads_used, &selected_entry->kernel);
-
     init_image(&output, input.rows, input.columns);
 
+    mystery_box_t *boxes[num_threads_used];
     for (int i = 0; i < num_threads_used; i++)
     {
-        pthread_create(&threads[i], NULL, convolve, &box);
-        box->thread = box->thread + 1;
+        boxes[i] = create_mystery_box(&input, &output, i, num_threads_used, &selected_entry->kernel);
+    }
+    //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
+    for (int i = 0; i < num_threads_used; i++)
+    {
+        pthread_create(&threads[i], NULL, convolve, boxes[i]);
     }
     for (int i = 0; i < num_threads_used; i++)
     {
         pthread_join(threads[i], NULL);
     }
-    //convolve(&output, &input, selected_entry->kernel);
     encode_and_store(&output, output_file_name);
 
     free_image(&input);
     free_image(&output);
-    // free(&input);
-    // free(&output);
-    free(box);
 }
