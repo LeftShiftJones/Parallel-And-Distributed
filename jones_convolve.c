@@ -30,7 +30,7 @@ typedef struct
 {
     image_t *input;
     image_t *output;
-    catalog_entry_t *box_entry;
+    kernel_t *kernel;
     int thread;
     int num_threads;
 } mystery_box_t;
@@ -68,6 +68,14 @@ void init_image(image_t *image, int rows, int columns)
     image->rows = rows;
     image->columns = columns;
     image->pixels = (pixel_t *)malloc(image->columns * image->rows * BYTES_PER_PIXEL);
+}
+
+/* Free a previously initialized image.
+ */
+void
+free_image(image_t *image)
+{
+  free(image->pixels);
 }
 
 void copy(image_t *output, image_t *input)
@@ -110,14 +118,16 @@ void *convolve(void *thing)
     image_t *input = box->input;
     image_t *output = box->output;
     //kernel_t kernel = box->kernel;
+    int thread = box->thread;
+    int threads = box->num_threads;
     int columns = input->columns;
     int rows = input->rows;
     int half_dim = KERNEL_DIM / 2;
-    int kernel_norm = normalize_kernel(box->box_entry->kernel);
+    int kernel_norm = normalize_kernel(*box->kernel);
 
     //init_image(output, rows, columns);
 
-    for (int r = box->thread; r < rows - 1; r += box->num_threads)
+    for (int r = thread; r < rows - 1; r += threads)
     {
         for (int c = 0; c < columns - 1; c++)
         {
@@ -138,7 +148,7 @@ void *convolve(void *thing)
                         {
                             int R = r + (kr - half_dim);
                             int C = c + (kc - half_dim);
-                            value += box->box_entry->kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
+                            value += *box->kernel[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
                         }
                     }
                     value /= kernel_norm;
@@ -265,20 +275,15 @@ void usage(char *prog_name, char *msge)
     exit(1);
 }
 
-mystery_box_t *create_mystery_box(image_t *input, image_t *output, int num_threads, catalog_entry_t *entry)
+mystery_box_t *create_mystery_box(image_t *input, image_t *output, int num_threads, kernel_t *kernel)
 {
     mystery_box_t *new = malloc(sizeof(mystery_box_t));
     new->input = input;
     new->output = output;
-    new->box_entry = entry;
+    new->kernel = kernel;
     new->thread = 0;
     new->num_threads = num_threads;
     return new;
-}
-
-void free_mystery_box(mystery_box_t *old)
-{
-    free(old);
 }
 
 int main(int argc, char **argv)
@@ -312,7 +317,7 @@ int main(int argc, char **argv)
             output_file_name = optarg;
             break;
         case 'n':
-            num_threads_used = optarg;
+            num_threads_used = atoi(optarg);
             break;
         case 'h':
         default:
@@ -336,11 +341,11 @@ int main(int argc, char **argv)
     image_t input;
     image_t output;
     pthread_t threads[num_threads_used];
-
     load_and_decode(&input, input_file_name);
-    mystery_box_t box = create_mystery_box(&input, &output, &num_threads_used, &selected_entry);
+    mystery_box_t *box = create_mystery_box(&input, &output, num_threads_used, &selected_entry->kernel);
 
-    init_image(output, rows, columns);
+    init_image(&output, input.rows, input.columns);
+
     for (int i = 0; i < num_threads_used; i++)
     {
         pthread_create(&threads[i], NULL, convolve, &box);
@@ -355,5 +360,7 @@ int main(int argc, char **argv)
 
     free_image(&input);
     free_image(&output);
-    free_mystery_box(&box);
+    // free(&input);
+    // free(&output);
+    free(box);
 }
