@@ -18,6 +18,10 @@
 
 typedef unsigned char pixel_t;
 
+typedef int bool;
+#define true 1
+#define false 0
+
 typedef struct
 {
     pixel_t *pixels;
@@ -212,11 +216,12 @@ void usage(char *prog_name, char *msge)
     }
 
     fprintf(stderr, "usage: %s [flags]\n", prog_name);
-    fprintf(stderr, "  -h                print help\n");
-    fprintf(stderr, "  -i <input file>   set input file\n");
-    fprintf(stderr, "  -o <output file>  set output file\n");
-    fprintf(stderr, "  -k <kernel>       kernel from:\n");
-    fprintf(stderr, "  -n <num threads>  # threads to use:\n");
+    fprintf(stderr, "  -h                   print help\n");
+    fprintf(stderr, "  -i <input file>      set input file\n");
+    fprintf(stderr, "  -o <output file>     set output file\n");
+    fprintf(stderr, "  -k <kernel>          kernel from:\n");
+    fprintf(stderr, "  -n <num threads>     # threads to use:\n");
+    fprintf(stderr, "  -r <run operation>   how to run threads:\n");
 
     for (int i = 0; kernel_catalog[i].name; i++)
     {
@@ -224,6 +229,7 @@ void usage(char *prog_name, char *msge)
         fprintf(stderr, "       %s%s\n", name,
                 strcmp(name, DEFAULT_KERNEL_NAME) ? "" : " (default)");
     }
+    fprintf(stderr, "Run Operations:\n\tsingle -- Run n processors \n\tsequence -- Run in sequence from 1-n cores");
     exit(1);
 }
 
@@ -255,9 +261,10 @@ int main(int argc, char **argv)
     char *input_file_name = NULL;
     char *output_file_name = NULL;
     int num_threads_used = 1;
+    bool run_sequence = false;
 
     int ch;
-    while ((ch = getopt(argc, argv, "hi:k:o:n:")) != -1)
+    while ((ch = getopt(argc, argv, "hi:k:o:n:r:")) != -1)
     {
         switch (ch)
         {
@@ -277,6 +284,10 @@ int main(int argc, char **argv)
             break;
         case 'n':
             num_threads_used = atoi(optarg);
+            break;
+        case 'r':
+            if(strcmp("sequence", optarg) == 0)
+                run_sequence = true;
             break;
         case 'h':
         default:
@@ -307,29 +318,32 @@ int main(int argc, char **argv)
     mystery_box_t *boxes[num_threads_used];
     load_and_decode(&input, input_file_name);
     init_image(&output, input.rows, input.columns);
-    for(int c = 1; c <= num_threads_used; c++) {
-        for (int i = 0; i < c; i++)
-        {
-            boxes[i] = create_mystery_box(&input, &output, i, c, &selected_entry->kernel);
-        }
-        double start_time = now();
-        //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
-        for (int i = 0; i < c; i++)
-        {
-            pthread_create(&threads[i], NULL, convolve, boxes[i]);
-        }
-        for (int i = 0; i < c; i++)
-        {
-            pthread_join(threads[i], NULL);
-        }
-        if(c > 1)
-            printf("With %d cores, took %5.3f seconds\n", c, now()-start_time);
-        else
-            printf("With 1 core, took %5.3f seconds\n", now()-start_time);
-    }
-    encode_and_store(&output, output_file_name);
 
-    /* ORIGINAL WORKING CODE, TESTING LOOP MECHANISM
+    if(run_sequence) {
+        for(int c = 1; c <= num_threads_used; c++) 
+        {
+            for (int i = 0; i < c; i++)
+            {
+                boxes[i] = create_mystery_box(&input, &output, i, c, &selected_entry->kernel);
+            }
+            double start_time = now();
+            //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
+            for (int i = 0; i < c; i++)
+            {
+                pthread_create(&threads[i], NULL, convolve, boxes[i]);
+            }
+            for (int i = 0; i < c; i++)
+            {
+                pthread_join(threads[i], NULL);
+            }
+            if(c > 1)
+                printf("With %d cores, took %5.3f seconds\n", c, now()-start_time);
+            else
+                printf("With 1 core, took %5.3f seconds\n", now()-start_time);
+        }
+        encode_and_store(&output, output_file_name);
+    } else {
+        // ORIGINAL WORKING CODE, TESTING LOOP MECHANISM
         init_image(&output, input.rows, input.columns);
         mystery_box_t *boxes[num_threads_used];
         for (int i = 0; i < num_threads_used; i++)
@@ -337,17 +351,21 @@ int main(int argc, char **argv)
             boxes[i] = create_mystery_box(&input, &output, i, num_threads_used, &selected_entry->kernel);
         }
         double start_time = now();
-        //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
         for (int i = 0; i < num_threads_used; i++)
         {
             pthread_create(&threads[i], NULL, convolve, boxes[i]);
+            printf("%d\n", i);
         }
         for (int i = 0; i < num_threads_used; i++)
         {
             pthread_join(threads[i], NULL);
         }
+        if(num_threads_used > 1)
+                printf("With %d cores, took %5.3f seconds\n", num_threads_used, now()-start_time);
+            else
+                printf("With 1 core, took %5.3f seconds\n", now()-start_time);
         encode_and_store(&output, output_file_name);
-    */
+    }
 
     free_image(&input);
     free_image(&output);
