@@ -118,6 +118,7 @@ int normalize_kernel(kernel_t kernel)
 
 void *convolve(void *thing)
 {
+    //cast void * to my mystery_box_t object
     mystery_box_t *box = (mystery_box_t *)thing;
     image_t *input = box->input;
     image_t *output = box->output;
@@ -126,13 +127,15 @@ void *convolve(void *thing)
     int rows = input->rows;
     int half_dim = KERNEL_DIM / 2;
     int kernel_norm = normalize_kernel(*kernel);
+
+    //Go through image by rows, jumping by the number of threads
     for (int r = box->thread; r < rows; r += box->num_threads)
     {
         for (int c = 0; c < columns; c++)
         {
-
             for (int b = 0; b < BYTES_PER_PIXEL; b++)
             {
+                //Don't alter alpha values
                 int value = 0;
                 if (b == ALPHA_OFFSET)
                 {
@@ -144,8 +147,15 @@ void *convolve(void *thing)
                     {
                         for (int kc = 0; kc < KERNEL_DIM; kc++)
                         {
+                            /**
+                             * Here is where I handle the edges, which previously were
+                             * filled with an empty alpha channel.
+                             */
+                            //temp value for r & c
                             int substitute_r = r;
                             int substitute_c = c;
+                            //alter temp values if at edges of image
+                            //only runs at edges, no less efficient than original program
                             if(r==0) {
                                 substitute_r++;
                                 if(c==0) { substitute_c++; }
@@ -156,9 +166,10 @@ void *convolve(void *thing)
                                 if(c==0) { substitute_c++; }
                                 if(c==columns-1) { substitute_c--; }
                             }
+                            //alter value with kernel value, adjusted for edges of frame
                             int R = substitute_r + (kr - half_dim);//out of bounds here at r == 0
                             int C = substitute_c + (kc - half_dim);
-                            value += (*kernel)[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];                            
+                            value += (*kernel)[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];
                         }
                     }
                     value /= kernel_norm;
@@ -232,8 +243,8 @@ void usage(char *prog_name, char *msge)
     fprintf(stderr, "  -i <input file>      set input file\n");
     fprintf(stderr, "  -o <output file>     set output file\n");
     fprintf(stderr, "  -k <kernel>          kernel from:\n");
-    fprintf(stderr, "  -n <num threads>     # threads to use:\n");
-    fprintf(stderr, "  -r <run operation>   how to run threads:\n");
+    fprintf(stderr, "  -n <num threads>     # threads to use\n");
+    fprintf(stderr, "  -r <run sequece>     run threads in sequence\n");
 
     for (int i = 0; kernel_catalog[i].name; i++)
     {
@@ -241,12 +252,15 @@ void usage(char *prog_name, char *msge)
         fprintf(stderr, "       %s%s\n", name,
                 strcmp(name, DEFAULT_KERNEL_NAME) ? "" : " (default)");
     }
-    fprintf(stderr, "Run Operations:\n\tsingle -- Run n processors \n\tsequence -- Run in sequence from 1-n cores");
     exit(1);
 }
 
+/**
+ * Method to initalize a new myster box struct
+ */
 mystery_box_t *create_mystery_box(image_t *input, image_t *output, int current_thread, int num_threads, kernel_t *kernel)
 {
+    //allocated memory is later freed
     mystery_box_t *new = malloc(sizeof(mystery_box_t));
     new->input = input;
     new->output = output;
@@ -263,6 +277,9 @@ double now(void) {
     return current_time.tv_sec + (current_time.tv_nsec / ONE_BILLION);
 }
 
+/**
+ * Main method of program
+ */
 int main(int argc, char **argv)
 {
     char *prog_name = argv[0]; /* Convenience */
@@ -276,7 +293,7 @@ int main(int argc, char **argv)
     bool run_sequence = false;
 
     int ch;
-    while ((ch = getopt(argc, argv, "hi:k:o:n:r:")) != -1)
+    while ((ch = getopt(argc, argv, "hi:k:o:n:s")) != -1)
     {
         switch (ch)
         {
@@ -297,9 +314,8 @@ int main(int argc, char **argv)
         case 'n':
             num_threads_used = atoi(optarg);
             break;
-        case 'r':
-            if(strcmp("sequence", optarg) == 0)
-                run_sequence = true;
+        case 's':
+            run_sequence = true;
             break;
         case 'h':
         default:
@@ -327,19 +343,31 @@ int main(int argc, char **argv)
     image_t input;
     image_t output;
     pthread_t threads[num_threads_used];
+    //mystery box for every thread being run
     mystery_box_t *boxes[num_threads_used];
+
+    //bring in input image and initialize output image
     load_and_decode(&input, input_file_name);
     init_image(&output, input.rows, input.columns);
 
-    if(run_sequence) {
-        for(int c = 1; c <= num_threads_used; c++) 
+    /**
+     * This portion of the code runs image convolution for a number of
+     * processors in sequence (convolve on 1, 2, ... n)
+     * I created this functionality mostly for testing runtimes on
+     * various processor sizes at once
+     */
+    if(run_sequence)
+    {
+        for(int c = 1; c <= num_threads_used; c++)
         {
             for (int i = 0; i < c; i++)
             {
+                //initalize all mystery boxes
                 boxes[i] = create_mystery_box(&input, &output, i, c, &selected_entry->kernel);
             }
+
+            //start timer and run convolution for each thread
             double start_time = now();
-            //mystery_box_t *box = create_mystery_box(&input, &output, 0, num_threads_used, &selected_entry->kernel);
             for (int i = 0; i < c; i++)
             {
                 pthread_create(&threads[i], NULL, convolve, boxes[i]);
@@ -347,7 +375,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < c; i++)
             {
                 pthread_join(threads[i], NULL);
-                free(boxes[i]);
+                free(boxes[i]);//free box memory
             }
             if(c > 1)
                 printf("With %d cores, took %5.3f seconds\n", c, now()-start_time);
@@ -355,9 +383,13 @@ int main(int argc, char **argv)
                 printf("With 1 core, took %5.3f seconds\n", now()-start_time);
         }
         encode_and_store(&output, output_file_name);
-    } else {
-        init_image(&output, input.rows, input.columns);
-        mystery_box_t *boxes[num_threads_used];
+    }
+    /**
+     * If the user has not decided to run as sequentially, program runs
+     * one convolution on p processors
+     */
+    else
+    {
         for (int i = 0; i < num_threads_used; i++)
         {
             boxes[i] = create_mystery_box(&input, &output, i, num_threads_used, &selected_entry->kernel);
@@ -370,7 +402,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < num_threads_used; i++)
         {
             pthread_join(threads[i], NULL);
-            free(boxes[i]);
+            free(boxes[i]); //free box memory
         }
         if(num_threads_used > 1)
                 printf("With %d cores, took %5.3f seconds\n", num_threads_used, now()-start_time);
@@ -379,6 +411,7 @@ int main(int argc, char **argv)
         encode_and_store(&output, output_file_name);
     }
 
+    //free images
     free_image(&input);
     free_image(&output);
 }
