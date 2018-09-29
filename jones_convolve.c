@@ -343,7 +343,6 @@ int main(int argc, char **argv)
         }
         encode_and_store(&output, output_file_name);
     } else {
-        // ORIGINAL WORKING CODE, TESTING LOOP MECHANISM
         init_image(&output, input.rows, input.columns);
         mystery_box_t *boxes[num_threads_used];
         for (int i = 0; i < num_threads_used; i++)
