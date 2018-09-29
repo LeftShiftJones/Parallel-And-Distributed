@@ -335,6 +335,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < c; i++)
             {
                 pthread_join(threads[i], NULL);
+                free(boxes[i]);
             }
             if(c > 1)
                 printf("With %d cores, took %5.3f seconds\n", c, now()-start_time);
@@ -343,6 +344,7 @@ int main(int argc, char **argv)
         }
         encode_and_store(&output, output_file_name);
     } else {
+        // ORIGINAL WORKING CODE, TESTING LOOP MECHANISM
         init_image(&output, input.rows, input.columns);
         mystery_box_t *boxes[num_threads_used];
         for (int i = 0; i < num_threads_used; i++)
@@ -358,6 +360,7 @@ int main(int argc, char **argv)
         for (int i = 0; i < num_threads_used; i++)
         {
             pthread_join(threads[i], NULL);
+            free(boxes[i]);
         }
         if(num_threads_used > 1)
                 printf("With %d cores, took %5.3f seconds\n", num_threads_used, now()-start_time);
