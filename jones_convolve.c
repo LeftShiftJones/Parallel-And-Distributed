@@ -126,9 +126,9 @@ void *convolve(void *thing)
     int rows = input->rows;
     int half_dim = KERNEL_DIM / 2;
     int kernel_norm = normalize_kernel(*kernel);
-    for (int r = box->thread+1; r < rows - 1; r += box->num_threads)
+    for (int r = box->thread; r < rows; r += box->num_threads)
     {
-        for (int c = 1; c < columns - 1; c++)
+        for (int c = 0; c < columns; c++)
         {
 
             for (int b = 0; b < BYTES_PER_PIXEL; b++)
@@ -144,8 +144,20 @@ void *convolve(void *thing)
                     {
                         for (int kc = 0; kc < KERNEL_DIM; kc++)
                         {
-                            int R = r + (kr - half_dim);
-                            int C = c + (kc - half_dim);
+                            int substitute_r = r;
+                            int substitute_c = c;
+                            if(r==0) {
+                                substitute_r++;
+                                if(c==0) { substitute_c++; }
+                                if(c==columns-1) { substitute_c--; }
+                            }
+                            if(r==rows-1){
+                                substitute_r--;
+                                if(c==0) { substitute_c++; }
+                                if(c==columns-1) { substitute_c--; }
+                            }
+                            int R = substitute_r + (kr - half_dim);//out of bounds here at r == 0
+                            int C = substitute_c + (kc - half_dim);
                             value += (*kernel)[kr][kc] * input->pixels[IMG_BYTE(columns, R, C, b)];                            
                         }
                     }
@@ -354,7 +366,6 @@ int main(int argc, char **argv)
         for (int i = 0; i < num_threads_used; i++)
         {
             pthread_create(&threads[i], NULL, convolve, boxes[i]);
-            printf("%d\n", i);
         }
         for (int i = 0; i < num_threads_used; i++)
         {
