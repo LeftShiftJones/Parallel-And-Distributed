@@ -244,7 +244,7 @@ void usage(char *prog_name, char *msge)
     fprintf(stderr, "  -o <output file>     set output file\n");
     fprintf(stderr, "  -k <kernel>          kernel from:\n");
     fprintf(stderr, "  -n <num threads>     # threads to use\n");
-    fprintf(stderr, "  -r <run sequece>     run threads in sequence\n");
+    fprintf(stderr, "  -s                   run threads in sequence (1, 2...p)\n");
 
     for (int i = 0; kernel_catalog[i].name; i++)
     {
