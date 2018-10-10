@@ -7,6 +7,9 @@
 #include "generatematrices.h"
 
 #define MAT_ELT(mat, cols, i, j) *(mat + (i * cols) + j)
+typedef int bool;
+#define true 1
+#define false 0
 
 void mat_print(char *msge, int *a, int m, int n){
     printf("\n== %s ==\n%7s", msge, "");
@@ -41,6 +44,7 @@ void usage(char *prog_name, char *msg) {
 
     fprintf(stderr, "usage: %s [flags]\n", prog_name);
     fprintf(stderr, "   -h                  print help\n");
+    fprintf(stderr, "   -g                  generate matrix files (otherwise read from given filenames)\n");
     fprintf(stderr, "   -m  <value>         m value for matrix generation\n");
     fprintf(stderr, "   -n  <value>         n value for matrix generation\n");
     fprintf(stderr, "   -p  <value>         p value for matrix generation\n");
@@ -59,7 +63,8 @@ int main(int argc, char **argv) {
     char *a_filename;
     char *b_filename;
     char *c_filename;
-    while((ch = getopt(argc, argv, "hm:n:p:a:b:o:")) != -1) {
+    bool generate_files = false;
+    while((ch = getopt(argc, argv, "hgm:n:p:a:b:o:")) != -1) {
         switch(ch) {
             case 'm':
                 m = atoi(optarg);
@@ -79,6 +84,9 @@ int main(int argc, char **argv) {
             case 'o':
                 c_filename = optarg;
                 break;
+            case 'g':
+                generate_files = true;
+                break;
             case 'h':
             default:
                 usage(prog_name, "");
@@ -91,42 +99,31 @@ int main(int argc, char **argv) {
         usage(prog_name, "Invalid mpn values");
     }
 
-    //create a and b matrices
-    generate_matrix(m, n, a_filename);
-    generate_matrix(n, p, b_filename);
+    //create a and b matrices if specified
+    if(generate_files) {
+        generate_matrix(m, n, a_filename);
+        generate_matrix(n, p, b_filename);
+    }
+
+    //import matrices
     int num_c_elements = m*p;
     int *matrix_a = read_matrix(&m, &n, a_filename);
     int *matrix_b = read_matrix(&n, &p, b_filename);
-
-
-
     int *matrix_c = calloc(num_c_elements, sizeof(int));
 
-    int num_procs;
-    int rank;
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    printf("Matrix multiplying on processor %d of %d\n", rank, num_procs);
+    //MPI Stuff
+    //int num_procs;
+    //int rank;
+    //MPI_Init(&argc, &argv);
+    //MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    //printf("Matrix multiplying on processor %d of %d\n", rank, num_procs);
     mat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
-    MPI_Finalize();
+    //MPI_Finalize();
 
     write_matrix(matrix_c, m, p, c_filename);
     mat_print("A", matrix_a, m, n);
     mat_print("B", matrix_b, n, p);
     mat_print("C", matrix_c, m, p);
-
-
-    //old version of matrix that didn't work, created elements prior to multiplication
-    // int matrix_c[m][p];
-    // for(int i=0; i<m; i++) {
-    //     for(int j=0; j<p; j++) {
-    //         matrix_c[i][j] = 0;
-    //     }
-    // }
-    // mat_mult((int *)matrix_c, matrix_a, matrix_b, m, n, p);
-    // write_matrix((int *)matrix_c, m, p, c_filename);
-    // mat_print("A", matrix_a, m, n);
-    // mat_print("B", matrix_b, n, p);
-    // mat_print("C", (int *)matrix_c, m, p);
 }
+
