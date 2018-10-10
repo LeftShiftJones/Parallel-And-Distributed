@@ -59,8 +59,8 @@ main(int argc, char **argv)
   mat_print("A", (int *)A, 3, 4);
   mat_print("B", (int *)B, 4, 2);
   mat_print("C", (int *)C, 3, 2);
-   int a=3, b=5; 
+    
   generate_matrix(3, 5, "matrix_a.mat");
-  int *test = read_matrix(&a, &b, "matrix_a.mat");
+  int *test = read_matrix(3, 5, "matrix_a.mat")
   mat_print("TEST", test, 3, 5);
 }
