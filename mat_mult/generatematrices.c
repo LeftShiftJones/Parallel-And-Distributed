@@ -8,11 +8,8 @@ Matrix generation file,
 "inspired" by Dr. Nurkkala's in-class demonstration
 */
 
-//srand(time(0));
-
 void generate_matrix(int rows, int cols, char *file_name) {
     srand(time(0));
-    //printf("%d, %d\n", rows, cols);
     int num_elements = rows*cols;
     int *new_matrix = malloc(num_elements * sizeof(int));
 
@@ -48,7 +45,7 @@ int *read_matrix(int *rows, int *cols, char *file_name) {
         exit(1);
     }
 
-    fscanf(fp, "%d %d\n", rows, cols); //get rows and columns
+    fscanf(fp, "%d %d\n", rows, cols);
     int num_elements = *rows * *cols;
     int *rtn = malloc(num_elements * sizeof(int));
     for(int i = 0; i < num_elements; i++) {
