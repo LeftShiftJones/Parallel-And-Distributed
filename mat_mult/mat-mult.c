@@ -17,6 +17,7 @@ typedef int bool;
 typedef struct {
     int rank;           /* Current process rank */
     int num_procs;      /* Total # of processes */
+    int num_swaps;      /* Number of times data has been passed */
     int a_rows;         /* Rows in A */
     int a_cols;         /* Cols in A */
     int b_rows;         /* Rows in B */
@@ -64,16 +65,17 @@ int *transpose_matrix(int *matrix, int rows, int cols) {
 /**
     Old method for matrix multiplication
 */
-void amat_mult(int *c, int *a, int *b, int m, int n, int p) {
+void seq_mat_mult(int *c, int *a, int *b, int m, int n, int p) {
     for (int i = 0;  i < m;  i++) {
         for (int j = 0;  j < p;  j++) {
             for (int k = 0;  k < n;  k++) {
                 MAT_ELT(c, p, i, j) += MAT_ELT(a, n, i, k) * MAT_ELT(b, p, k, j);
+                //printf("Multiplying A[%d][%d] and B[%d][%d]\n", i, k, j, k);
             }
-            printf("C[%d][%d] = %d\n", i, j, MAT_ELT(c, p, i, j));
+            //printf("C[%d][%d] = %d\n", i, j, MAT_ELT(c, p, i, j));
         }
     }
-} 
+}
 
 void mat_mult(mystery_box_t *box, int rank, int procs) {
     int m = box->a_rows;
@@ -83,25 +85,25 @@ void mat_mult(mystery_box_t *box, int rank, int procs) {
     int b_load = box->b_load;
     int c_load = box->c_load;
     int *a = box->a_stripe;
-    int *b = box->b_stripe;
+    int *b = transpose_matrix(box->b_stripe, n, b_load);
+    mat_print("B transform", b, n, b_load);
     int *c = box->c_stripe;
-    printf("Processor %d of %d checking in\n", rank, procs);
+
+
     //set next and previous processors
     int next_proc, prev_proc;
     next_proc = (rank + 1) % procs;
     prev_proc = (!rank) ? procs-1 : rank-1;
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    printf("m:%d n:%d p:%d a_l:%d b_l:%d c_l:%d\n", m, n, p, a_load, b_load, c_load);
     for (int i = 0;  i < m && i < a_load;  i++) {
-        printf("got to first loop\n");
         for (int j = 0;  j < p && j < b_load;  j++) {
             for (int k = 0;  k < n;  k++) {
-                printf("%d: Multiplying A[%d][%d] and B[%d][%d]\n", rank, i, k, j, k);
-                MAT_ELT(c, p, i, j) += MAT_ELT(a, n, i, k) * MAT_ELT(b, p, j, k);
+                //printf("%d: Multiplying A[%d][%d] and B[%d][%d]\n", rank, i*rank, k, j*rank, k);
+                MAT_ELT(c, p, i, j) += MAT_ELT(a, n, i, k) * MAT_ELT(b, p, k, j);
             }
         }
     }
-    printf("We somehow made it here\n");
     MPI_Barrier(MPI_COMM_WORLD);
     printf("Processor %d getting out, probably about to error\n", rank);
 }
@@ -113,7 +115,7 @@ void usage(char *prog_name, char *msg) {
 
     fprintf(stderr, "usage: %s [flags]\n", prog_name);
     fprintf(stderr, "   -h                  print help\n");
-    fprintf(stderr, "   -g                  generate matrix files (otherwise read from given filenames)\n");
+    //fprintf(stderr, "   -g                  generate matrix files (otherwise read from given filenames)\n");
     fprintf(stderr, "   -m  <value>         m value for matrix generation\n");
     fprintf(stderr, "   -n  <value>         n value for matrix generation\n");
     fprintf(stderr, "   -p  <value>         p value for matrix generation\n");
@@ -126,13 +128,13 @@ void usage(char *prog_name, char *msg) {
 int main(int argc, char **argv) {
     char *prog_name = argv[0];
     int ch;
-    int m = 3;
-    int n = 4;
-    int p = 5;
+    int m = 2;
+    int n = 3;
+    int p = 4;
     char *a_filename;
     char *b_filename;
     char *c_filename;
-    bool generate_files = false;
+    //bool generate_files = false;
     while((ch = getopt(argc, argv, "hgm:n:p:a:b:o:")) != -1) {
         switch(ch) {
             case 'm':
@@ -153,9 +155,9 @@ int main(int argc, char **argv) {
             case 'o':
                 c_filename = optarg;
                 break;
-            case 'g':
+            /*case 'g':
                 generate_files = true;
-                break;
+                break;*/
             case 'h':
             default:
                 usage(prog_name, "");
@@ -168,24 +170,19 @@ int main(int argc, char **argv) {
         usage(prog_name, "Invalid m, p, or n values");
     }
 
-    //create a and b matrices if specified
-    if(generate_files) {
-        generate_matrix(m, n, a_filename);
-        generate_matrix(n, p, b_filename);
-    }
+    generate_matrix(m, n, a_filename);
+    generate_matrix(n, p, b_filename);
 
     //import matrices
     int num_c_elements = m*p;
     int *matrix_a = read_matrix(&m, &n, a_filename);
     int *matrix_b = read_matrix(&n, &p, b_filename);
-    //int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
     int *matrix_c = calloc(num_c_elements, sizeof(int));
-    amat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
-    //mat_print("C", matrix_c, m, p);
+    /*
+    alt_seq_mat_mult(matrix_c, matrix_a, transpose_matrix(matrix_b, n, p), m, n, p);
+    mat_print("C alt", matrix_c, m, p);
 
-    matrix_a = read_matrix(&m, &n, a_filename);
-    matrix_c = calloc(num_c_elements, sizeof(int));
-    matrix_b = read_matrix(&n, &p, b_filename);
+    matrix_c = calloc(num_c_elements, sizeof(int));*/
 
     //MPI Stuff
     int num_procs;
@@ -194,16 +191,21 @@ int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if(!rank) {
+        seq_mat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
+        mat_print("C Norm", matrix_c, m, p);
+        matrix_c = calloc(num_c_elements, sizeof(int));
+    }
 
     //stuff to give to each process
     int a_load = (m / num_procs);
     int b_load = (p / num_procs);
-    printf("a:%d\n", a_load);
-    //printf("Matrix multiplying on processor %d of %d\n", rank, num_procs);
+    int c_load = a_load;
 
     mystery_box_t *box = malloc(sizeof(mystery_box_t));
     box->rank = rank;
     box->num_procs = num_procs;
+    box->num_swaps = 0;
     box->a_rows = m;
     box->a_cols = n;
     box->b_rows = p;
@@ -212,19 +214,25 @@ int main(int argc, char **argv) {
     box->c_cols = p;
     box->a_load = a_load;
     box->b_load = b_load;
-    box->c_load = a_load;
-    box->a_stripe = &MAT_ELT(matrix_a, n, (rank*a_load), 0);
-    box->b_stripe = &MAT_ELT(matrix_b, p, (rank*b_load), 0);
-    box->c_stripe = &MAT_ELT(matrix_c, p, (rank*a_load), 0);
-    printf("%d, %d, %d\n", *box->a_stripe, *box->b_stripe, *box->c_stripe);
+    box->c_load = c_load;
+    box->a_stripe = matrix_a;//&MAT_ELT(matrix_a, n, (rank*a_load), 0);
+    box->b_stripe = matrix_b;//&MAT_ELT(matrix_b, n, (rank*b_load), 0);
+
+    if(!rank) { //give cpu 0 all of c
+        box->c_stripe = matrix_c;
+    } else {
+        box->c_stripe = matrix_c;
+    }
+    box->c_stripe = matrix_c;//&MAT_ELT(matrix_c, p, (rank*a_load), 0);
+    //printf("\nProcessor %d STRIPE_VALUES: A:%d, B:%d, C:%d\n", rank, *box->a_stripe, *box->b_stripe, *box->c_stripe);
     mat_mult(box, rank, num_procs);
     //mat_mult(rank, num_procs, matrix_c, matrix_a, matrix_b, m, n, p);
-    MPI_Finalize();
-    //matrix_b = transpose_matrix(matrix_b, )
+
     if(!rank) {
         write_matrix(matrix_c, m, p, c_filename);
         mat_print("A", matrix_a, m, n);
         mat_print("B", matrix_b, n, p);
         mat_print("C", matrix_c, m, p);
     }
+    MPI_Finalize();
 }
