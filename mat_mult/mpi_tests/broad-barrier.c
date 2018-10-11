@@ -55,7 +55,7 @@ broad_barrier(int rank, int procs)
 
   printf("%d @ %0.2f: enter b-a-r-r-i-e-r\n",
          rank, get_timer());
-  MPI_Barrier(MPI_COMM_WORLD);
+  //MPI_Barrier(MPI_COMM_WORLD);
   printf("%d @ %0.2f: leave barrier\n",
          rank, get_timer());
 }

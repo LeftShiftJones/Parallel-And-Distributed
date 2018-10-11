@@ -11,14 +11,28 @@ typedef int bool;
 #define true 1
 #define false 0
 #define MASTER_CORE 0
+#define DEFAULT_TAG 1
 
 /* object to store important information */
 typedef struct {
-    int a_rows;
-    int a_cols;
-    int b_rows;
-    int b_cols;
+    int rank;           /* Current process rank */
+    int num_procs;      /* Total # of processes */
+    int a_rows;         /* Rows in A */
+    int a_cols;         /* Cols in A */
+    int b_rows;         /* Rows in B */
+    int b_cols;         /* Cols in B */
+    int c_rows;         /* Rows in C */
+    int c_cols;         /* Cols in C */
+
+    int a_load;         /* Number of rows of A per processor */
+    int b_load;         /* Number of rows of B per processor */
+    int c_load;         /* Number of rows of C per processor */
+
+    int *a_stripe;      /* Stripe of A */
+    int *b_stripe;      /* Stripe of B */
+    int *c_stripe;      /* Stripe of C */
 } mystery_box_t;
+
 
 void mat_print(char *msge, int *a, int m, int n){
     printf("\n== %s ==\n%7s", msge, "");
@@ -47,7 +61,31 @@ int *transpose_matrix(int *matrix, int rows, int cols) {
     return rtn;
 }
 
-void mat_mult(int *c, int *a, int *b, int m, int n, int p){
+/**
+    Old method for matrix multiplication
+*/
+void amat_mult(int *c, int *a, int *b, int m, int n, int p) {
+    for (int i = 0;  i < m;  i++) {
+        for (int j = 0;  j < p;  j++) {
+            for (int k = 0;  k < n;  k++) {
+                MAT_ELT(c, p, i, j) += MAT_ELT(a, n, i, k) * MAT_ELT(b, p, k, j);
+            }
+        }
+    }
+}
+
+void mat_mult(mystery_box_t *box) {
+    int m = box->a_rows;
+    int n = box->a_cols;
+    int p = box->b_cols;
+    int rank = box->rank;
+    printf("Processor %d of %d checking in\n", rank, procs);
+    //set next and previous processors
+    int next_proc, prev_proc;
+    next_proc = (rank + 1) % procs;
+    prev_proc = (!rank) ? procs-1 : rank-1;
+
+
     for (int i = 0;  i < m;  i++) {
         for (int j = 0;  j < p;  j++) {
             for (int k = 0;  k < n;  k++) {
@@ -128,26 +166,36 @@ int main(int argc, char **argv) {
     //import matrices
     int num_c_elements = m*p;
     int *matrix_a = read_matrix(&m, &n, a_filename);
-    int *matrix_b = read_matrix(&n, &p, b_filename);
+    int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
     int *matrix_c = calloc(num_c_elements, sizeof(int));
 
     //MPI Stuff
-    /*
+
     int num_procs;
     int rank;
+
+    //stuff to give to each process
+    int a_load = (m / num_procs);
+    int b_load = (m / num_procs);
+
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    printf("Matrix multiplying on processor %d of %d\n", rank, num_procs);*/
+    printf("Matrix multiplying on processor %d of %d\n", rank, num_procs);
 
     //mat_print("A:B4", matrix_a, m, n);
     //matrix_a = transpose_matrix(matrix_a, m, n);
     //mat_print("A:after", matrix_a, n, m);
-    mat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
-    //MPI_Finalize();
+
+    mystery_box_t box = malloc(sizeof(mystery_box_t));
+    box->a_load = a_load;
+    mat_mult(rank, num_procs, matrix_c, matrix_a, matrix_b, m, n, p);
+    MPI_Finalize();
     //matrix_b = transpose_matrix(matrix_b, )
-    write_matrix(matrix_c, m, p, c_filename);
-    mat_print("A", matrix_a, m, n);
-    mat_print("B", matrix_b, n, p);
-    mat_print("C", matrix_c, m, p);
+    if(!rank) {
+        write_matrix(matrix_c, m, p, c_filename);
+        mat_print("A", matrix_a, m, n);
+        mat_print("B", matrix_b, n, p);
+        mat_print("C", matrix_c, m, p);
+    }
 }
