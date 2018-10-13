@@ -192,9 +192,9 @@ double now(void) {
 int main(int argc, char **argv) {
     char *prog_name = argv[0];
     int ch;
-    int m = 4;
-    int n = 4;
-    int p = 4;
+    int m = 50;
+    int n = 50;
+    int p = 50;
     char *a_filename;
     char *b_filename;
     char *c_filename;
@@ -267,8 +267,12 @@ int main(int argc, char **argv) {
     box->b_stripe = b;
     box->c_stripe = c;
 
+    double start_time = now();
     //perform matrix multiplication
     mat_mult(box, rank, num_procs, a_load, b_load, m, n, p);
+    if(!rank) {
+        printf("With %d cores, calculating an %dx%d matrix took %5.3f seconds\n", num_procs, m, p, now()-start_time);
+    }
     free(a);
     free(b);
     free(c);
