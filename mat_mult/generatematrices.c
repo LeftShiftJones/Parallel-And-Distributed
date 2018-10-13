@@ -9,7 +9,7 @@ Matrix generation file,
 */
 
 void generate_matrix(int rows, int cols, char *file_name) {
-    //srand(time(0));
+    srand(time(0));
     int num_elements = rows*cols;
     int *new_matrix = malloc(num_elements * sizeof(int));
 
