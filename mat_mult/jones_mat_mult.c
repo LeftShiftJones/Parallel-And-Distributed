@@ -16,8 +16,6 @@ typedef int bool;
 
 /* object to store important information */
 typedef struct {
-    // int a_load;
-    // int b_load;
     int *a_stripe;      /* Stripe of A */
     int *b_stripe;      /* Stripe of B */
     //int *c_stripe;      /* Stripe of C */
@@ -73,60 +71,68 @@ void seq_mat_mult(int *c, int *a, int *b, int m, int n, int p) {
  * Main matrix multiplication method
  */
 void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_load, int m, int n, int p) {
-    // int a_load = box->a_load;
-    // int b_load = box->b_load;
     int *a = box->a_stripe;
     int *b = box->b_stripe;
-    int *c = calloc(a_load*p, sizeof(int));//box->c_stripe;
     //mat_print("a", a, a_load, n);
-    //mat_print("b", b, b_load, n);
+    int *c = calloc(a_load*p, sizeof(int));
+    //MPI things
     MPI_Status status;
-    //set next and previous processors
     int next_proc, prev_proc;
     next_proc = (this_rank + 1) % procs;
     prev_proc = (!this_rank) ? procs-1 : this_rank-1;
     int *not_mine = malloc(b_load*n * sizeof(int));
-    //printf("Starting loop...\n");
+
     //////////BEGINNING OF LOOP//////////
     for(int step = 0; step < procs; step++) {
 
     for (int i = 0;  i < a_load;  i++) {
         for (int j = 0;  j < b_load;  j++) {
             for (int k = 0;  k < n;  k++) {
-                int loc = (j + (((this_rank + step) % procs) * b_load)); // <-- This beauty is courtesy of Benj R.
+                int loc = (j + (((this_rank + step) % procs) * b_load)); // <-- Shifts matrix values to correct positions
                 //printf("%d: %d = %d x %d[%d][%d]\n", this_rank, MAT_ELT(c, p, i, loc), MAT_ELT(a, n, i, k), MAT_ELT(b, n, j, k), j, k);
                 MAT_ELT(c, p, i, loc) += MAT_ELT(a, n, i, k) * MAT_ELT(b, n, j, k);
             }
         }
     }
-    //printf("%d: performing send %d\n", this_rank, (step+1));
+
     //send/receive c values
-    if(procs > 1) {
-        MPI_Send(b,
-            b_load*n, MPI_INT,
-            next_proc, DEFAULT_TAG,
-            MPI_COMM_WORLD);
-        MPI_Recv(not_mine,
-            b_load*n, MPI_INT,
-            prev_proc, DEFAULT_TAG,
-            MPI_COMM_WORLD, &status);
-        //printf("receiveing b\n");
-        b = not_mine;
+    for(int i = 0; i < procs; i++) {
+        if(i == this_rank) {
+            MPI_Send(b,
+                b_load*n, MPI_INT,
+                next_proc, DEFAULT_TAG,
+                MPI_COMM_WORLD);
+        }
     }
+    for(int i = 0; i < procs; i++) {
+        if(i == this_rank) {
+            MPI_Recv(not_mine,
+                b_load*n, MPI_INT,
+                prev_proc, DEFAULT_TAG,
+                MPI_COMM_WORLD, &status);
+        }
+    }
+
+        // MPI_Recv(not_mine,
+        //     b_load*n, MPI_INT,
+        //     prev_proc, DEFAULT_TAG,
+        //     MPI_COMM_WORLD, &status);
+        b = not_mine;
 
     }
     //////////END OF LOOP//////////
 
     MPI_Barrier(MPI_COMM_WORLD);
-    //send all data
+
     if(this_rank != MASTER_CORE) {
         MPI_Send(c,
             a_load*p, MPI_INT,
             MASTER_CORE, DEFAULT_TAG,
             MPI_COMM_WORLD);
-            //printf("Sent the data\n");
     }
-    MPI_Barrier;
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
     //as rank 0, write data to disk;
     if(this_rank == 0) {
         //output filename
@@ -138,8 +144,7 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
             fprintf(stderr, "Can't open %s for writing\n", file_name);
             exit(1);
         }
-        //print rows and cols to file
-        //print processor 0's c chunk
+        //print processor 0's c chunk so can be read from disk
         fprintf(fp, "%d %d\n", m, p);
         for(int i = 0; i < a_load; i++) {
             for(int j = 0; j < p; j++) {
@@ -147,15 +152,14 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
             }
             fprintf(fp, "\n");
         }
-        printf("About to bring in values\n");
-        //start getting values from other processors and
+
         int *other_c_rows = malloc(a_load*p*sizeof(int));
         for(int i = 1; i < procs; i++) {
             MPI_Recv(other_c_rows,
                 a_load*p, MPI_INT,
                 i, DEFAULT_TAG,
                 MPI_COMM_WORLD, &status);
-            //mat_print("c_received", other_c_rows, a_load, p);
+
             for(int j = 0; j < a_load; j++) {
                 for(int k = 0; k < p; k++) {
                     fprintf(fp, " %3d", MAT_ELT(other_c_rows, p, j, k));
@@ -200,9 +204,9 @@ double now(void) {
 int main(int argc, char **argv) {
     char *prog_name = argv[0];
     int ch;
-    int m = 64;
-    int n = 64;
-    int p = 64;
+    int m = 1000;
+    int n = 1000;
+    int p = 1000;
     char *a_filename;
     char *b_filename;
     char *c_filename;
@@ -235,6 +239,7 @@ int main(int argc, char **argv) {
     if(!a_filename || !b_filename || !c_filename) usage(prog_name, "No file(s) specified");
     if(m < 1 || n < 1 || p < 1) usage(prog_name, "Invalid m, p, or n values");
     if(p%2==1) usage(prog_name, "P cannot be odd");
+    if(m%2==1) usage(prog_name, "M cannot be odd");
 
     //MPI Stuff
     int num_procs;
