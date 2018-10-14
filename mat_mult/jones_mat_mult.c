@@ -81,7 +81,7 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
     next_proc = (this_rank + 1) % procs;
     prev_proc = (!this_rank) ? procs-1 : this_rank-1;
     int *not_mine = malloc(n*b_load * sizeof(int));
-    
+
     //////////BEGINNING OF LOOP//////////
     for(int step = 0; step < procs; step++) {
 
@@ -106,6 +106,7 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
 
     }
     //////////END OF LOOP//////////
+    mat_print("C-ip", c, a_load, p);
 
     MPI_Barrier(MPI_COMM_WORLD);
     free(not_mine);
@@ -113,6 +114,10 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
     //send all data
     for(int i = 0; i < procs; i++) {
         if(this_rank == i) {
+            MPI_Send((void *)&a_load,
+                1, MPI_INT,
+                MASTER_CORE, DEFAULT_TAG,
+                MPI_COMM_WORLD);
             MPI_Send((void *)c,
                 a_load*p, MPI_INT,
                 MASTER_CORE, DEFAULT_TAG,
@@ -143,14 +148,19 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
             fprintf(fp, "\n");
         }
 
-        //start getting values from other processors and 
+        //start getting values from other processors and
         int *other_c_rows = calloc(a_load*p, sizeof(int));
         for(int i = 1; i < procs; i++) {
-            MPI_Recv((void *)other_c_rows,
-                a_load*p, MPI_INT,
+            int other_row_size;
+            MPI_Recv((void *)&other_row_size,
+                1, MPI_INT,
                 i, DEFAULT_TAG,
                 MPI_COMM_WORLD, &status);
-            for(int j = 0; j < a_load; j++) {
+            MPI_Recv((void *)other_c_rows,
+                other_row_size*p, MPI_INT,
+                i, DEFAULT_TAG,
+                MPI_COMM_WORLD, &status);
+            for(int j = 0; j < other_row_size; j++) {
                 for(int k = 0; k < p; k++) {
                     fprintf(fp, " %3d", MAT_ELT(other_c_rows, p, j, k));
                 }
@@ -192,13 +202,13 @@ double now(void) {
 int main(int argc, char **argv) {
     char *prog_name = argv[0];
     int ch;
-    int m = 50;
-    int n = 50;
-    int p = 50;
+    int m = 3;
+    int n = 3;
+    int p = 3;
     char *a_filename;
     char *b_filename;
     char *c_filename;
-    
+
     while((ch = getopt(argc, argv, "hm:n:p:a:b:o:")) != -1) {
         switch(ch) {
             case 'm':
@@ -224,7 +234,7 @@ int main(int argc, char **argv) {
                 usage(prog_name, "");
         }
     }
-    if(!a_filename || !b_filename || !c_filename) usage(prog_name, "No file(s) specified"); 
+    if(!a_filename || !b_filename || !c_filename) usage(prog_name, "No file(s) specified");
     if(m < 1 || n < 1 || p < 1) usage(prog_name, "Invalid m, p, or n values");
 
     //MPI Stuff
@@ -233,39 +243,98 @@ int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if(num_procs > m || num_procs > p) usage(prog_name, 
+    if(num_procs > m || num_procs > p) usage(prog_name,
         "Too many processors for the number of rows/columns specified.\n");
 
     //only processor 0 generates values
     if(!rank) {
         generate_matrix(m, n, a_filename);
         generate_matrix(n, p, b_filename);
+        //import matrices
+        int num_c_elements = m*p;
+        int *matrix_a = read_matrix(&m, &n, a_filename);
+        int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
+
+        //stuff to give to each process
+        int a_load = (m / num_procs);
+        int b_load = (p / num_procs);
+        //handle odd row nums
+        if(m%2==1) {
+            if(rank == num_procs-1) { //last processor
+                int temp = a_load;
+                a_load = m - ((temp * rank) + temp);
+                //printf("%d: %d\n", rank, a_load);
+            }
+        }
+        printf("%d a_load: %d\n", rank, a_load);
+        if(p%2==1) {
+            if(rank == num_procs-1) {
+                int temp = b_load;
+                //b_load = p - ((temp * rank) + temp);
+            }
+        }
+        printf("%d b_load: %d\n", rank, b_load);
+        mystery_box_t *box = malloc(sizeof(mystery_box_t));
+        int *a = calloc(a_load * n, sizeof(int));
+        int *b = calloc(b_load * n, sizeof(int));
+        int *c = calloc(a_load * p, sizeof(int));
+        for(int j = 1; j < num_procs; j++) {
+            int a_start = a_load * rank;
+            int b_start = b_load * rank;
+            for(int i = 0; i < a_load*n; i++) {
+                *(a + i) = *(matrix_a + (i + (n*a_start)));
+            }
+            for(int i = 0; i < b_load*n; i++) {
+                *(b + i) = *(matrix_b + (i + (n*b_start)));
+            }
+            box->a_stripe = a;
+            box->b_stripe = b;
+            box->c_stripe = c;
+        }
+
+        MPI_Send(&box, sizeof(mystery_box_t), MPI_BYTE, )
     }
     MPI_Barrier(MPI_COMM_WORLD); //make sure all processes get here before proceeding
 
-    //import matrices
-    int num_c_elements = m*p;
-    int *matrix_a = read_matrix(&m, &n, a_filename);
-    int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
-    
-    //stuff to give to each process
-    int a_load = (m / num_procs);
-    int b_load = (p / num_procs);
-    mystery_box_t *box = malloc(sizeof(mystery_box_t));
-    int *a = calloc(a_load * n, sizeof(int));
-    int *b = calloc(b_load * n, sizeof(int));
-    int *c = calloc(a_load * p, sizeof(int));
-    int a_start = a_load * rank;
-    int b_start = b_load * rank;
-    for(int i = 0; i < a_load*n; i++) {
-        *(a + i) = *(matrix_a + (i + (n*a_start)));
-    }
-    for(int i = 0; i < b_load*n; i++) {
-        *(b + i) = *(matrix_b + (i + (n*b_start)));
-    }
-    box->a_stripe = a;
-    box->b_stripe = b;
-    box->c_stripe = c;
+    // //import matrices
+    // int num_c_elements = m*p;
+    // int *matrix_a = read_matrix(&m, &n, a_filename);
+    // int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
+    //
+    // //stuff to give to each process
+    // int a_load = (m / num_procs);
+    // int b_load = (p / num_procs);
+    // //handle odd row nums
+    // if(m%2==1) {
+    //     if(rank == num_procs-1) { //last processor
+    //         int temp = a_load;
+    //         a_load = m - ((temp * rank) + temp);
+    //         //printf("%d: %d\n", rank, a_load);
+    //     }
+    // }
+    // printf("%d a_load: %d\n", rank, a_load);
+    // if(p%2==1) {
+    //     if(rank == num_procs-1) {
+    //         int temp = b_load;
+    //         //b_load = p - ((temp * rank) + temp);
+    //     }
+    // }
+    // printf("%d b_load: %d\n", rank, b_load);
+    // mystery_box_t *box = malloc(sizeof(mystery_box_t));
+    // int *a = calloc(a_load * n, sizeof(int));
+    // int *b = calloc(b_load * n, sizeof(int));
+    // int *c = calloc(a_load * p, sizeof(int));
+    // int a_start = a_load * rank;
+    // int b_start = b_load * rank;
+    // for(int i = 0; i < a_load*n; i++) {
+    //     *(a + i) = *(matrix_a + (i + (n*a_start)));
+    // }
+    // for(int i = 0; i < b_load*n; i++) {
+    //     *(b + i) = *(matrix_b + (i + (n*b_start)));
+    // }
+    // box->a_stripe = a;
+    // box->b_stripe = b;
+    // box->c_stripe = c;
 
     double start_time = now();
     //perform matrix multiplication
