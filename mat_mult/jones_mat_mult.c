@@ -13,7 +13,7 @@ typedef int bool;
 #define MASTER_CORE 0
 #define DEFAULT_TAG 1
 #define ONE_BILLION (double)1000000000.0
-#define DEBUG 1
+#define DEBUG 0
 
 /* object to store important information */
 typedef struct {

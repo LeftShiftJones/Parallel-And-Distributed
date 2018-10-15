@@ -16,4 +16,8 @@ With 4 cores, calculating an 2048x2048 matrix took 13.579 seconds
 With 8 cores, calculating an 2048x2048 matrix took 12.656 seconds
 With 16 cores, calculating an 2048x2048 matrix took 12.845 seconds
 
+With 1 cores, calculating an 4096x4096 matrix took 411.861 seconds
+With 2 cores, calculating an 4096x4096 matrix took 221.352 seconds
+With 4 cores, calculating an 4096x4096 matrix took 113.522 seconds
+With 8 cores, calculating an 4096x4096 matrix took 102.188 seconds
 
