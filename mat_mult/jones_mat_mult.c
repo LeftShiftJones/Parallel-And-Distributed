@@ -80,7 +80,7 @@ void seq_mat_mult(int *c, int *a, int *b, int m, int n, int p) {
 /**
  * Main matrix multiplication method
  */
-void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_load, int m, int n, int p, double start_time) {
+void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_load, int m, int n, int p, double start_time, char *filename) {
     if(DEBUG && !this_rank) {printf("starting mutliplication...\n"); }
     int a_size = a_load * n;
     int b_size = b_load * n;
@@ -115,20 +115,20 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
     }
     //////////END OF LOOP//////////
     if(DEBUG && !this_rank) { printf("out of loop, sending data\n"); }
-
-    if(this_rank > 0) {
-        MPI_Send(c, c_size, MPI_INT, MASTER_CORE, 2, MPI_COMM_WORLD);
-    }
+    //print out time to calculate all values
     if(!this_rank) {
         printf("With %d cores, calculating an %dx%d matrix took %5.3f seconds\n", procs, m, p, now()-start_time);
         if(1) { printf("writing to file\n"); }
     }
+    //everyone sends data to 0
+    if(this_rank > 0) {
+        MPI_Send(c, c_size, MPI_INT, MASTER_CORE, 2, MPI_COMM_WORLD);
+    }
     //as rank 0, write data to disk;
     if(this_rank == 0) {
-        char *file_name = "c_distributed.txt";
         FILE *fp;
-        if((fp = fopen(file_name, "w")) == NULL) {
-            fprintf(stderr, "Can't open %s for writing\n", file_name);
+        if((fp = fopen(filename, "w")) == NULL) {
+            fprintf(stderr, "Can't open %s for writing\n", filename);
             exit(1);
         }
         fprintf(fp, "%d %d\n", m, p);
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     double start_time = now();
-    mat_mult(my_box, rank, num_procs, a_load, b_load, m, n, p, start_time);
+    mat_mult(my_box, rank, num_procs, a_load, b_load, m, n, p, start_time, c_filename);
     if(!rank) {
         if(DEBUG) {
 
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
             int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
             int *matrix_c = calloc(m*p, sizeof(int));
             seq_mat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
-            write_matrix(matrix_c, m, p, c_filename);
+            write_matrix(matrix_c, m, p, "c_solution.txt");
         }
     }
     MPI_Finalize();
