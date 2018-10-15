@@ -1,0 +1,19 @@
+With 1 cores, calculating an 512x512 matrix took 0.801 seconds
+With 2 cores, calculating an 512x512 matrix took 0.413 seconds
+With 4 cores, calculating an 512x512 matrix took 0.219 seconds
+With 8 cores, calculating an 512x512 matrix took 0.217 seconds
+With 16 cores, calculating an 512x512 matrix took 0.309 seconds
+
+With 1 cores, calculating an 1024x1024 matrix took 6.779 seconds
+With 2 cores, calculating an 1024x1024 matrix took 3.717 seconds
+With 4 cores, calculating an 1024x1024 matrix took 1.750 seconds
+With 8 cores, calculating an 1024x1024 matrix took 1.595 seconds
+With 16 cores, calculating an 1024x1024 matrix took 1.751 seconds
+
+With 1 cores, calculating an 2048x2048 matrix took 51.192 seconds
+With 2 cores, calculating an 2048x2048 matrix took 26.271 seconds
+With 4 cores, calculating an 2048x2048 matrix took 13.579 seconds
+With 8 cores, calculating an 2048x2048 matrix took 12.656 seconds
+With 16 cores, calculating an 2048x2048 matrix took 12.845 seconds
+
+

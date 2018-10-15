@@ -13,6 +13,7 @@ typedef int bool;
 #define MASTER_CORE 0
 #define DEFAULT_TAG 1
 #define ONE_BILLION (double)1000000000.0
+#define DEBUG 1
 
 /* object to store important information */
 typedef struct {
@@ -20,6 +21,15 @@ typedef struct {
     int *b_stripe;      /* Stripe of B */
     //int *c_stripe;      /* Stripe of C */
 } mystery_box_t;
+
+/**
+ * Method for getting the current time
+ */
+double now(void) {
+    struct timespec current_time;
+    clock_gettime(CLOCK_REALTIME, &current_time);
+    return current_time.tv_sec + (current_time.tv_nsec / ONE_BILLION);
+}
 
 /**
  * Method to print out matrices
@@ -70,81 +80,57 @@ void seq_mat_mult(int *c, int *a, int *b, int m, int n, int p) {
 /**
  * Main matrix multiplication method
  */
-void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_load, int m, int n, int p) {
-    int *a = box->a_stripe;
-    int *b = box->b_stripe;
-    //mat_print("a", a, a_load, n);
-    int *c = calloc(a_load*p, sizeof(int));
+void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_load, int m, int n, int p, double start_time) {
+    if(DEBUG && !this_rank) {printf("starting mutliplication...\n"); }
+    int a_size = a_load * n;
+    int b_size = b_load * n;
+    int c_size = a_load * p;
     //MPI things
     MPI_Status status;
     int next_proc, prev_proc;
     next_proc = (this_rank + 1) % procs;
     prev_proc = (!this_rank) ? procs-1 : this_rank-1;
-    int *not_mine = malloc(b_load*n * sizeof(int));
+
+    int *a = box->a_stripe;
+    int *b = box->b_stripe;
+    int *c = calloc(c_size, sizeof(int));
+    //int *not_mine = malloc(b_size * sizeof(int));
 
     //////////BEGINNING OF LOOP//////////
     for(int step = 0; step < procs; step++) {
+    //printf("got here\n");
 
     for (int i = 0;  i < a_load;  i++) {
         for (int j = 0;  j < b_load;  j++) {
             for (int k = 0;  k < n;  k++) {
-                int loc = (j + (((this_rank + step) % procs) * b_load)); // <-- Shifts matrix values to correct positions
-                //printf("%d: %d = %d x %d[%d][%d]\n", this_rank, MAT_ELT(c, p, i, loc), MAT_ELT(a, n, i, k), MAT_ELT(b, n, j, k), j, k);
+                int loc = j + (((this_rank + step) % procs) * b_load); // <-- Shifts matrix values to correct positions
                 MAT_ELT(c, p, i, loc) += MAT_ELT(a, n, i, k) * MAT_ELT(b, n, j, k);
             }
         }
+        if(DEBUG && (i % 100==0)) {printf("Still alive @ %d\n", i);}
     }
-
-    //send/receive c values
-    for(int i = 0; i < procs; i++) {
-        if(i == this_rank) {
-            MPI_Send(b,
-                b_load*n, MPI_INT,
-                next_proc, DEFAULT_TAG,
-                MPI_COMM_WORLD);
-        }
-    }
-    for(int i = 0; i < procs; i++) {
-        if(i == this_rank) {
-            MPI_Recv(not_mine,
-                b_load*n, MPI_INT,
-                prev_proc, DEFAULT_TAG,
-                MPI_COMM_WORLD, &status);
-        }
-    }
-
-        // MPI_Recv(not_mine,
-        //     b_load*n, MPI_INT,
-        //     prev_proc, DEFAULT_TAG,
-        //     MPI_COMM_WORLD, &status);
-        b = not_mine;
+    MPI_Sendrecv(b, b_size, MPI_INT, next_proc, 1,
+                b, b_size, MPI_INT, prev_proc, 1, MPI_COMM_WORLD, &status);
 
     }
     //////////END OF LOOP//////////
+    if(DEBUG && !this_rank) { printf("out of loop, sending data\n"); }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    if(this_rank != MASTER_CORE) {
-        MPI_Send(c,
-            a_load*p, MPI_INT,
-            MASTER_CORE, DEFAULT_TAG,
-            MPI_COMM_WORLD);
+    if(this_rank > 0) {
+        MPI_Send(c, c_size, MPI_INT, MASTER_CORE, 2, MPI_COMM_WORLD);
     }
-
-    MPI_Barrier(MPI_COMM_WORLD);
-
+    if(!this_rank) {
+        printf("With %d cores, calculating an %dx%d matrix took %5.3f seconds\n", procs, m, p, now()-start_time);
+        if(1) { printf("writing to file\n"); }
+    }
     //as rank 0, write data to disk;
     if(this_rank == 0) {
-        //output filename
         char *file_name = "c_distributed.txt";
         FILE *fp;
-
-        //test opening file
         if((fp = fopen(file_name, "w")) == NULL) {
             fprintf(stderr, "Can't open %s for writing\n", file_name);
             exit(1);
         }
-        //print processor 0's c chunk so can be read from disk
         fprintf(fp, "%d %d\n", m, p);
         for(int i = 0; i < a_load; i++) {
             for(int j = 0; j < p; j++) {
@@ -152,26 +138,17 @@ void mat_mult(mystery_box_t *box, int this_rank, int procs, int a_load, int b_lo
             }
             fprintf(fp, "\n");
         }
-
-        int *other_c_rows = malloc(a_load*p*sizeof(int));
         for(int i = 1; i < procs; i++) {
-            MPI_Recv(other_c_rows,
-                a_load*p, MPI_INT,
-                i, DEFAULT_TAG,
-                MPI_COMM_WORLD, &status);
-
+            MPI_Recv(c, c_size, MPI_INT, i, 2, MPI_COMM_WORLD, &status);
             for(int j = 0; j < a_load; j++) {
                 for(int k = 0; k < p; k++) {
-                    fprintf(fp, " %3d", MAT_ELT(other_c_rows, p, j, k));
+                    fprintf(fp, " %3d", MAT_ELT(c, p, j, k));
                 }
                 fprintf(fp, "\n");
             }
         }
-        free(other_c_rows);
         fclose(fp);
-        //mat_print("Multiplied", read_matrix(&m, &p, file_name), m, p);
     }
-    MPI_Barrier;
 }
 
 /**
@@ -192,21 +169,12 @@ void usage(char *prog_name, char *msg) {
     exit(1);
 }
 
-/**
- * Method for getting the current time
- */
-double now(void) {
-    struct timespec current_time;
-    clock_gettime(CLOCK_REALTIME, &current_time);
-    return current_time.tv_sec + (current_time.tv_nsec / ONE_BILLION);
-}
-
 int main(int argc, char **argv) {
     char *prog_name = argv[0];
     int ch;
-    int m = 1000;
-    int n = 1000;
-    int p = 1000;
+    int m = 128;
+    int n = 128;
+    int p = 128;
     char *a_filename;
     char *b_filename;
     char *c_filename;
@@ -260,20 +228,21 @@ int main(int argc, char **argv) {
 
     //only processor 0 generates values, distributes
     if(rank == MASTER_CORE) {
+        if(DEBUG) {printf("Writing matrices\n");}
         generate_matrix(m, n, a_filename);
         generate_matrix(n, p, b_filename);
+        if(DEBUG) {printf("done writing matrices\n");}
 
         //import matrices
         int *matrix_a = read_matrix(&m, &n, a_filename);
         int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
-        int *a = calloc(a_load*n, sizeof(int));
-        int *b = calloc(b_load*n, sizeof(int));
-        int *c = calloc(a_load*p, sizeof(int));
+        int *a = calloc((a_load*n), sizeof(int));
+        int *b = calloc((b_load*n), sizeof(int));
+        int *c = calloc((a_load*p), sizeof(int));
 
         for(int i = 1; i < num_procs; i++) {
             a_start = a_load * i;
             b_start = b_load * i;
-            //fill values for a and b stripes
             for(int j = 0; j < a_load*n; j++) {
                 *(a + j) = *(matrix_a + (j + (n*a_start)));
             }
@@ -308,10 +277,16 @@ int main(int argc, char **argv) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     double start_time = now();
-    //perform matrix multiplication
-    mat_mult(my_box, rank, num_procs, a_load, b_load, m, n, p);
+    mat_mult(my_box, rank, num_procs, a_load, b_load, m, n, p, start_time);
     if(!rank) {
-        printf("With %d cores, calculating an %dx%d matrix took %5.3f seconds\n", num_procs, m, p, now()-start_time);
+        if(DEBUG) {
+
+            int *matrix_a = read_matrix(&m, &n, a_filename);
+            int *matrix_b = transpose_matrix(read_matrix(&n, &p, b_filename), n, p);
+            int *matrix_c = calloc(m*p, sizeof(int));
+            seq_mat_mult(matrix_c, matrix_a, matrix_b, m, n, p);
+            write_matrix(matrix_c, m, p, c_filename);
+        }
     }
     MPI_Finalize();
 }
