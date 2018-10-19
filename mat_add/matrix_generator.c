@@ -8,7 +8,7 @@ void generate_matrix(int rows, int cols, char *file_name) {
     int *new_matrix = malloc(num_elements * sizeof(int));
 
     for(int i = 0; i < num_elements; i++) {
-        new_matrix[i] = i+1;//random() / (RAND_MAX / 100);
+        new_matrix[i] = random() / (RAND_MAX / 100);
     }
 
     write_matrix(new_matrix, rows, cols, file_name);

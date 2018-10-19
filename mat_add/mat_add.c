@@ -64,14 +64,14 @@ int main(int argc, char **argv) {
     mat_print("C After", (int *)C, 2, 3);
     write_matrix((int *)C, 30, 30)
     */
-    int rowcol = 30;
-    generate_matrix(30, 30, "a_test.txt");
-    generate_matrix(30, 30, "b_test.txt");
-    int *a = read_matrix(&rowcol, &rowcol, "a_test.txt");
-    int *b = read_matrix(&rowcol, &rowcol, "b_test.txt");
-    int *c = malloc(30 * 30 * sizeof(int));
-    mat_add(a, b, c, 30, 30);
-    write_matrix(c, 30, 30, "c_test.txt");
+    int rowcol = 512;
+    // generate_matrix(rowcol, rowcol, "a_test.txt");
+    // generate_matrix(rowcol, rowcol, "b_test.txt");
+    int *a = read_matrix(&rowcol, &rowcol, "a.txt");
+    int *b = read_matrix(&rowcol, &rowcol, "b.txt");
+    int *c = malloc(rowcol * rowcol * sizeof(int));
+    mat_add(a, b, c, rowcol, rowcol);
+    write_matrix(c, rowcol, rowcol, "c_test.txt");
 
     return 0;
 }
