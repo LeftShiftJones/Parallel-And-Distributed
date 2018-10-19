@@ -227,11 +227,10 @@ int main(int argc, char **argv) {
     mat_add(my_box);
     //printf("%d: got out of adding\n", rank);
     MPI_Barrier(MPI_COMM_WORLD);
-    if(rank == 0) {
-        write_data_to_disk(my_box);
-    }
+
     if(!rank) {
         printf("On two %dx%d matrices, matrix addition took %0.5f seconds\n", rows, cols, now()-start_time);
+        write_data_to_disk(my_box);
     }
 
     MPI_Finalize();
