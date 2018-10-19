@@ -192,8 +192,8 @@ void write_data_to_disk(mystery_box_t *my_box) {
 }
 
 int main(int argc, char **argv) {
-    int rows = 512;
-    int cols = 512;
+    int rows = 256;
+    int cols = 256;
 
     /* MPI Elements */
     int num_procs;
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     if(!rank) {
-        printf("On two %dx%d matrices, matrix addition took %0.5f seconds\n", rows, cols, now()-start_time);
+        printf("On two %dx%d matrices, matrix addition took %5.3f seconds\n", rows, cols, now()-start_time);
         write_data_to_disk(my_box);
     }
 
