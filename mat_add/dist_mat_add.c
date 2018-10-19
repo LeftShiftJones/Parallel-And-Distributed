@@ -139,10 +139,10 @@ void mat_add (mystery_box_t *my_box) {
     MPI_Barrier(MPI_COMM_WORLD);
     my_box->c_stripe = c;
     /* Send data to 0
-        (0's is now stored in its mystery_box struct) */
+        (0's data is now stored in its mystery_box struct) */
     if(rank > 0) {
         MPI_Send(&proc_load, 1, MPI_INT, 0, 4, MPI_COMM_WORLD);
-        // MPI_Send(c, size, MPI_INT, 0, 5, MPI_COMM_WORLD);
+        // MPI_Send(c, size, MPI_INT, 0, 5, MPI_COMM_WORLD); //<-- Old method of sending data
         MPI_Request request;
         MPI_Isend(c, size, MPI_INT, 0, 5, MPI_COMM_WORLD, &request);
             if(DEBUG) {printf("Finished calculation on processor %d, sending to 0\n", rank);}
@@ -225,12 +225,11 @@ int main(int argc, char **argv) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     mat_add(my_box);
-    //printf("%d: got out of adding\n", rank);
     MPI_Barrier(MPI_COMM_WORLD);
 
     if(!rank) {
-        printf("On two %dx%d matrices, matrix addition took %5.3f seconds\n", rows, cols, now()-start_time);
         write_data_to_disk(my_box);
+        printf("On two %dx%d matrices, matrix addition took %5.3f seconds\n", rows, cols, now()-start_time);
     }
 
     MPI_Finalize();
