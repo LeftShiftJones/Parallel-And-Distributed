@@ -8,6 +8,7 @@
 
 #define MAT_GET(matrix, columns, i, j) *(matrix + (colums * i) + j)
 #define MASTER_CORE 0
+#define ONE_BILLION (double)1000000000.0
 #define DEBUG 0
 
 /**
@@ -40,6 +41,15 @@ void mat_print(char *msge, int *a, int m, int n){
         }
         printf("\n");
     }
+}
+
+/**
+ * Method for getting the current time
+ */
+double now(void) {
+    struct timespec current_time;
+    clock_gettime(CLOCK_REALTIME, &current_time);
+    return current_time.tv_sec + (current_time.tv_nsec / ONE_BILLION);
 }
 
 /**
@@ -206,7 +216,7 @@ int main(int argc, char **argv) {
     my_box->cols = cols;
     my_box->rank = rank;
     my_box->num_procs = num_procs;
-
+    double start_time = now();
     if(rank == 0) {
         distribute_inital_data(my_box, rows, cols, num_procs);
     } else {
@@ -219,6 +229,9 @@ int main(int argc, char **argv) {
     MPI_Barrier(MPI_COMM_WORLD);
     if(rank == 0) {
         write_data_to_disk(my_box);
+    }
+    if(!rank) {
+        printf("On two %dx%d matrices, matrix addition took %0.5f seconds\n", rows, cols, now()-start_time);
     }
 
     MPI_Finalize();
