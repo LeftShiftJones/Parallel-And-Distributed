@@ -37,7 +37,8 @@ void *mat_add(void *parameter) {
     int rows = my_box->rows;
     int cols = my_box->cols;
     int thread = my_box->thread;
-    for(int i = 0; i < load; i++) {
+    int size = load * cols;
+    for(int i = 0; i < size; i++) {
         //printf("%d: %d %d %d\n", thread, i, load, start);
         *(C_Matrix + (start*thread) + i) = *(A_Matrix + (start*thread) + i) + *(B_Matrix + (start*thread) + i);
     }
