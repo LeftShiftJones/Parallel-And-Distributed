@@ -142,6 +142,12 @@ catalog_entry_t* find_entry_by_name(char *name) {
 }
 
 
+void distribute_data(image_t *input, char *input_file_name, image_t *output, char *output_file_name) {
+    load_and_decode(&input, input_file_name);
+    init_image(&output, input.rows, input.columns);
+}
+
+
 void usage(char *prog_name, char *msge) {
     if (msge && strlen(msge)) {
         fprintf(stderr, "\n%s\n\n", msge);
@@ -161,4 +167,16 @@ void usage(char *prog_name, char *msge) {
                 strcmp(name, DEFAULT_KERNEL_NAME) ? "" : " (default)");
     }
     exit(1);
+}
+
+
+int main(int argc, char **argv, char **envp) {
+    int num_procs;
+    int rank;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+
+    return 0;
 }
